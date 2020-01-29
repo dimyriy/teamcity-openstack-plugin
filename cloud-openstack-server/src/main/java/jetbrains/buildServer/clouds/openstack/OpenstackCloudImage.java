@@ -1,24 +1,23 @@
 package jetbrains.buildServer.clouds.openstack;
 
+import com.jcabi.log.VerboseRunnable;
+import jetbrains.buildServer.clouds.CloudErrorInfo;
+import jetbrains.buildServer.clouds.CloudImage;
+import jetbrains.buildServer.clouds.CloudInstanceUserData;
+import jetbrains.buildServer.clouds.InstanceStatus;
+import jetbrains.buildServer.log.Loggers;
+import jetbrains.buildServer.serverSide.ServerPaths;
+import org.jclouds.openstack.nova.v2_0.features.ServerApi;
+import org.jclouds.openstack.nova.v2_0.options.CreateServerOptions;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-
-import org.jclouds.openstack.nova.v2_0.features.ServerApi;
-import org.jclouds.openstack.nova.v2_0.options.CreateServerOptions;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-
-import com.jcabi.log.VerboseRunnable;
-
-import jetbrains.buildServer.clouds.CloudErrorInfo;
-import jetbrains.buildServer.clouds.CloudImage;
-import jetbrains.buildServer.clouds.CloudInstanceUserData;
-import jetbrains.buildServer.clouds.InstanceStatus;
-import jetbrains.buildServer.serverSide.ServerPaths;
 
 public class OpenstackCloudImage implements CloudImage {
 
@@ -69,9 +68,14 @@ public class OpenstackCloudImage implements CloudImage {
 
         this.executor.scheduleWithFixedDelay(new VerboseRunnable(() -> {
             for (OpenstackCloudInstance instance : getInstances()) {
-                instance.updateStatus();
-                if (instance.getStatus() == InstanceStatus.STOPPED || instance.getStatus() == InstanceStatus.ERROR)
+                try {
+                    instance.updateStatus();
+                    if (instance.getStatus() == InstanceStatus.STOPPED || instance.getStatus() == InstanceStatus.ERROR)
+                        forgetInstance(instance);
+                } catch (Exception e) {
+                    Loggers.SERVER.error("Got exception while calculating status of instances, will remove it from list of instances", e);
                     forgetInstance(instance);
+                }
             }
         }, true), 3, 3, TimeUnit.SECONDS);
     }
