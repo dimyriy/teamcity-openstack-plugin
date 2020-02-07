@@ -62,60 +62,55 @@ public class OpenstackCloudInstance implements CloudInstance {
 
     public synchronized void updateStatus() {
         LOG.debug(String.format("Pinging %s for status", getName()));
-        if (serverCreated != null) {
-            try {
-                Server server = cloudImage.getNovaServerApi().get(serverCreated.getId());
-                if (server != null) {
-                    Server.Status currentStatus = server.getStatus();
-                    LOG.debug(String.format("Getting instance status from openstack for '%s', result is '%s' (previous internal status setted was '%s')",
-                            getName(), currentStatus, getStatus()));
-                    switch (currentStatus) {
-                        case BUILD:
-                        case REBUILD:
-                            setStatus(InstanceStatus.STARTING);
-                            break;
-                        case ACTIVE:
-                            // When OpenStack instance is stopping, the status is always 'ACTIVE' => check if termination started
-                            if (InstanceStatus.SCHEDULED_TO_STOP.equals(getStatus()) || InstanceStatus.STOPPING.equals(getStatus())) {
-                                setStatus(InstanceStatus.STOPPING);
-                            } else {
-                                setStatus(InstanceStatus.RUNNING);
-                            }
-                            break;
-                        case ERROR:
-                            setStatus(InstanceStatus.ERROR);
-                            terminate();
-                            break;
-                        case SHUTOFF:
-                            terminate();
-                            break;
-                        case DELETED:
-                        case SUSPENDED:
-                        case PAUSED:
-                        case SOFT_DELETED:
-                        case UNKNOWN:
-                        case UNRECOGNIZED:
-                        case SHELVED:
-                        case SHELVED_OFFLOADED:
-                        default:
-                            setStatus(InstanceStatus.STOPPED);
-                            break;
+        if (serverCreated == null) {
+            LOG.debug("Will skip status updating cause instance is not created yet");
+            return;
+        }
+        try {
+            Server server = cloudImage.getNovaServerApi().get(serverCreated.getId());
+            if (server != null) {
+                Server.Status currentStatus = server.getStatus();
+                LOG.debug(String.format("Getting instance status from openstack for '%s', result is '%s' (previous internal status setted was '%s')",
+                        getName(), currentStatus, getStatus()));
+                switch (currentStatus) {
+                case BUILD:
+                case REBUILD:
+                    setStatus(InstanceStatus.STARTING);
+                    break;
+                case ACTIVE:
+                    // When OpenStack instance is stopping, the status is always 'ACTIVE' => check if termination started
+                    if (InstanceStatus.SCHEDULED_TO_STOP.equals(getStatus()) || InstanceStatus.STOPPING.equals(getStatus())) {
+                        setStatus(InstanceStatus.STOPPING);
+                    } else {
+                        setStatus(InstanceStatus.RUNNING);
                     }
-                } else {
-                    setStatus(InstanceStatus.STOPPED);
-                }
-            } catch (Exception e) {
-                LOG.error("Got exception while calculating instance status, will terminate", e);
-                try {
+                    break;
+                case ERROR:
                     setStatus(InstanceStatus.ERROR);
                     terminate();
-                } catch (Exception terminationException) {
-                    LOG.error("Got exception while terminating errored instance", e);
-                    setStatus(InstanceStatus.ERROR);
+                    break;
+                case SHUTOFF:
+                    terminate();
+                    break;
+                case DELETED:
+                case SUSPENDED:
+                case PAUSED:
+                case SOFT_DELETED:
+                case UNKNOWN:
+                case UNRECOGNIZED:
+                case SHELVED:
+                case SHELVED_OFFLOADED:
+                default:
+                    setStatus(InstanceStatus.STOPPED);
+                    break;
                 }
+            } else {
+                setStatus(InstanceStatus.STOPPED);
             }
-        } else {
-            LOG.debug("Will skip status updating cause instance is not created yet");
+        } catch (Exception e) {
+            LOG.error("Got exception while calculating instance status, will terminate", e);
+            setStatus(InstanceStatus.ERROR);
+            terminate();
         }
     }
 
